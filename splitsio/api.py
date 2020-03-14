@@ -34,10 +34,11 @@ class IsoDatetime(datetime):
     """Custom datetime class with ISO formatting."""
     @classmethod
     def isoparse(cls, timestamp: str) -> 'IsoDatetime':
-        dt = dateutil.parser.isoparse(timestamp.rstrip('Z'))
+        s = timestamp.strip("'").rstrip('Z')
+        dt = dateutil.parser.isoparse(s)
         return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond, dt.tzinfo)
     def __repr__(self) -> str:
-        return self.isoformat(timespec = 'milliseconds') + 'Z'
+        return repr(self.isoformat(timespec = 'milliseconds') + 'Z')
 
 isoparse = lambda ts : None if (ts is None) else IsoDatetime.isoparse(ts)
 
@@ -91,8 +92,8 @@ class Category(SplitsIOData):
     """A Category is a ruleset for a Game (Any%, 100%, MST, etc.) and an optional container for Runs. Its canonical ID string is a base 10 number, e.g. "312", "1456", "11"."""
     id: str
     name: str
-    created_at: datetime = isodatetime(repr = False)
-    updated_at: datetime = isodatetime(repr = False)
+    created_at: Optional[datetime] = isodatetime(default = None, repr = False)
+    updated_at: Optional[datetime] = isodatetime(default = None, repr = False)
     @classmethod
     def collection(cls) -> str:
         return "categories"
@@ -112,8 +113,8 @@ class Game(SplitsIOData):
     id: str
     name: str
     shortname: Optional[str]
-    created_at: datetime = isodatetime(repr = False)
-    updated_at: datetime = isodatetime(repr = False)
+    created_at: Optional[datetime] = isodatetime(default = None, repr = False)
+    updated_at: Optional[datetime] = isodatetime(default = None, repr = False)
     categories: Optional[List[Category]] = field(default = None, repr = False)
     @classmethod
     def collection(cls) -> str:
@@ -154,9 +155,9 @@ class Runner(SplitsIOData):
     twitch_name: Optional[str]
     display_name: str
     name: str
-    avatar: str = field(repr = False)
-    created_at: datetime = isodatetime(repr = False)
-    updated_at: datetime = isodatetime(repr = False)
+    avatar: Optional[str] = field(default = None, repr = False)
+    created_at: Optional[datetime] = isodatetime(default = None, repr = False)
+    updated_at: Optional[datetime] = isodatetime(default = None, repr = False)
     @classmethod
     def collection(cls) -> str:
         return "runners"
@@ -240,7 +241,7 @@ class Run(SplitsIOData):
     game: Optional[Game]
     category: Optional[Category]
     runners: List[Runner]
-    segments: List[Segment] = field(repr = False)
+    segments: Optional[List[Segment]] = field(default = None, repr = False)
     histories: Optional[List[History]] = field(default = None, repr = False)
     @classmethod
     def collection(cls) -> str:

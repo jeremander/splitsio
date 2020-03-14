@@ -23,7 +23,7 @@ Then to access the main data types in Python:
 >>> sms
 Game(id='15', name='Super Mario Sunshine', shortname='sms')
 >>> sms.created_at
-2014-04-18 06:28:59.764000+00:00
+'2014-04-18T06:28:59.764Z'
 ```
 
 NOTE: for games, the identifier for querying is the `shortname` (here `'sms'`), *not* the numerical `id`.
