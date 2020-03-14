@@ -108,7 +108,7 @@ NOTE: for runners, the identifier for querying is the `name` all lowercased (her
 >>> len(run.histories)
 90
 >>> run.histories[1]
-History(attempt_number=89, realtime_duration_ms=1507300, gametime_duration_ms=None, started_at=2020-03-10T20:06:08.000Z, ended_at=2020-03-10T20:31:15.000Z)
+History(attempt_number=89, realtime_duration_ms=1507300, gametime_duration_ms=None, started_at='2020-03-10T20:06:08.000Z', ended_at='2020-03-10T20:31:15.000Z')
 >>> run.segments[0].name
 'Sword Get'
 >>> len(run.segments[0].histories)
