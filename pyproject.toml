@@ -5,12 +5,15 @@ description = "A Python implementation of the splits.io REST API."
 authors = ["Jeremy Silver <jeremyag@comcast.net>"]
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/jeremander/splitsio"
 keywords = ['splitsio', 'speedrun']
 
 [tool.poetry.dependencies]
 python = "^3.7"
 dataclasses_json = "^0.4.2"
 marshmallow = "^3.5.1"
+pandas = "^1.0.1"
+matplotlib = "^3.2.0"
 
 [tool.poetry.dev-dependencies]
 

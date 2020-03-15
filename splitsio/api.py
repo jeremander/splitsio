@@ -1,28 +1,20 @@
 """Python implementation of the splits.io REST API.
 See https://github.com/glacials/splits-io/blob/master/docs/api.md for schema details."""
 
-from abc import abstractproperty
 from dataclasses import dataclass, Field, field
 from datetime import datetime
 import dateutil.parser
+import numpy as np
+import pandas as pd
 from operator import attrgetter
-import requests
-from typing import Any, Counter, Dict, List, NamedTuple, Optional, Type, TypeVar
+from typing import Any, Counter, List, NamedTuple, Optional, Sequence, Type
 
-from dataclasses_json import config, DataClassJsonMixin
+from dataclasses_json import config
 from marshmallow import fields
 
+from splitsio.query import query, SplitsIOData
 
-#####################
-# TYPES & CONSTANTS #
-#####################
 
-API_URL = 'https://splits.io/api/v4/'
-USER_AGENT = 'splitsio_api'
-
-T = TypeVar('T', bound = 'SplitsIOData')
-Url = str
-JSONDict = Dict[str, Any]
 CategoryCounts = NamedTuple('CategoryCounts', [('category', 'Category'), ('numRuns', int)])
 
 
@@ -36,7 +28,7 @@ class IsoDatetime(datetime):
     def isoparse(cls, timestamp: str) -> 'IsoDatetime':
         s = timestamp.strip("'").rstrip('Z')
         dt = dateutil.parser.isoparse(s)
-        return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond, dt.tzinfo)
+        return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond, dt.tzinfo)  # type: ignore
     def __repr__(self) -> str:
         return repr(self.isoformat(timespec = 'milliseconds') + 'Z')
 
@@ -44,48 +36,14 @@ isoparse = lambda ts : None if (ts is None) else IsoDatetime.isoparse(ts)
 
 isoformat = lambda dt : None if (dt is None) else repr(dt)
 
-def isodatetime(**kwargs: Any) -> Field:
+def isodatetime(**kwargs: Any) -> Field:  # type: ignore
     """dataclass field rendering a datetime object as a string when parsing/formatting."""
     return field(metadata = config(encoder = isoformat, decoder = isoparse, mm_field = fields.DateTime(format = 'iso')), **kwargs)
-
-def query(endpoint: Url) -> JSONDict:
-    """Queries an endpoint, returning a JSON dict."""
-    headers = {'User-Agent' : USER_AGENT}
-    uri = API_URL + endpoint
-    response = requests.get(uri, headers = headers)
-    response.raise_for_status()
-    return response.json()
 
 
 ##############
 # DATA MODEL #
 ##############
-
-class SplitsIOData(DataClassJsonMixin):
-    @classmethod
-    def collection(cls) -> str:
-        """Name of the API collection."""
-        raise NotImplementedError
-    @abstractproperty
-    def canonical_id(self) -> str:
-        """Canonical ID string with which to query an endpoint."""
-    @classmethod
-    def from_id(cls: Type[T], id_: str, **params: Any) -> T:
-        """Constructs a data object from an ID string and any additional parameters."""
-        endpoint = cls.collection() + '/' + str(id_)
-        if params:
-            endpoint += '?' + '&'.join(f'{key}={val}' for (key, val) in params.items())
-        key = cls.__name__.lower()
-        d = query(endpoint)[key]
-        return cls.from_dict(d)
-    def endpoint_prefix(self) -> str:
-        """Endpoint prefix for an object with a particular ID."""
-        return self.collection() + '/' + self.canonical_id + '/'
-    def get_associated(self, cls: Type[T], name: str) -> List[T]:
-        """Gets all associated objects of a certain type related to this one."""
-        endpoint = self.endpoint_prefix() + name
-        d = query(endpoint)
-        return [cls.from_dict(item) for item in d[name]]
 
 @dataclass
 class Category(SplitsIOData):
@@ -100,10 +58,10 @@ class Category(SplitsIOData):
     @property
     def canonical_id(self) -> str:
         return self.id
-    def runs(self) -> List['Run']:
+    def runs(self) -> Sequence['Run']:
         """Runs for the category."""
         return self.get_associated(Run, 'runs')
-    def runners(self) -> List['Runner']:
+    def runners(self) -> Sequence['Runner']:
         """Runners for the category."""
         return self.get_associated(Runner, 'runners')
 
@@ -125,12 +83,13 @@ class Game(SplitsIOData):
     @classmethod
     def all(cls) -> List['Game']:
         """Obtains the list of all games."""
-        d = query('games')
+        # TODO: this might get paginated
+        (_, d) = query('games')
         return [Game.from_dict(item) for item in d['games']]
-    def runs(self) -> List['Run']:
+    def runs(self) -> Sequence['Run']:
         """Runs for the game."""
         return self.get_associated(Run, 'runs')
-    def runners(self) -> List['Runner']:
+    def runners(self) -> Sequence['Runner']:
         """Runners for the game."""
         return self.get_associated(Runner, 'runners')
     def category_counts(self) -> List[CategoryCounts]:
@@ -164,16 +123,16 @@ class Runner(SplitsIOData):
     @property
     def canonical_id(self) -> str:
         return self.name.lower()
-    def runs(self) -> List['Run']:
+    def runs(self) -> Sequence['Run']:
         """The runner's runs."""
         return self.get_associated(Run, 'runs')
-    def pbs(self) -> List['Run']:
+    def pbs(self) -> Sequence['Run']:
         """The runner's personal best runs."""
         return self.get_associated(Run, 'pbs')
-    def games(self) -> List[Game]:
+    def games(self) -> Sequence[Game]:
         """Games for which the runner has at least one speedrun."""
         return self.get_associated(Game, 'games')
-    def categories(self) -> List[Category]:
+    def categories(self) -> Sequence[Category]:
         """Categories the runner has participated in."""
         return self.get_associated(Category, 'categories')
 
@@ -237,10 +196,10 @@ class Run(SplitsIOData):
     parsed_at: datetime = isodatetime()
     created_at: datetime = isodatetime()
     updated_at: datetime = isodatetime()
-    video_url: Optional[str]
-    game: Optional[Game]
-    category: Optional[Category]
-    runners: List[Runner]
+    video_url: Optional[str] = None
+    game: Optional[Game] = None
+    category: Optional[Category] = None
+    runners: List[Runner] = field(default_factory = lambda : [])
     segments: Optional[List[Segment]] = field(default = None, repr = False)
     histories: Optional[List[History]] = field(default = None, repr = False)
     @classmethod
@@ -253,4 +212,38 @@ class Run(SplitsIOData):
     def from_id(cls: Type['Run'], id_: str, historic: bool = False, **params: Any) -> 'Run':
         """If historic = True, additionally retrieves all historic run data."""
         params['historic'] = 1 if historic else 0
-        return super(Run, cls).from_id(id_, **params)
+        run = super(Run, cls).from_id(id_, **params)
+        if run.histories:  # sort chronologically ascending
+            run.histories = run.histories[::-1]
+        return run
+    @property
+    def completed_attempts(self) -> List[History]:
+        """Returns all completed run attempts.
+        A completed attempt is one whose last segment has been completed."""
+        segments = [] if (self.segments is None) else self.segments
+        if (self.histories is None) or (len(segments) == 0):
+            return []
+        completed_attempt_numbers = {history.attempt_number for history in segments[-1].histories}  # type: ignore
+        return [history for history in self.histories if (history.attempt_number in completed_attempt_numbers)]
+        # return [history for history in self.histories if (history.realtime_duration_ms is not None) or (history.gametime_duration_ms is not None)]
+    def segment_durations(self, completed: bool = True) -> pd.DataFrame:
+        """Returns a matrix of segment durations, in seconds.
+        Rows are attempts (in chronological order); columns are segments.
+        If completed = True, only includes completed attempts; otherwise, uncompleted segments are assigned a null duration."""
+        def dur(history: History) -> float:
+            return getattr(history, 'realtime_duration_ms', getattr(history, 'gametime_duration_ms', None))
+        histories = [] if (self.histories is None) else self.histories
+        segments = [] if (self.segments is None) else self.segments
+        if completed and (len(segments) > 0):
+            attempt_numbers = [h.attempt_number for h in segments[-1].histories]  # type: ignore
+        else:
+            attempt_numbers = [h.attempt_number for h in histories]
+        attempt_number_indices = {j : i for (i, j) in enumerate(attempt_numbers)}
+        arr = np.zeros((len(attempt_number_indices), len(segments)), dtype = float)
+        arr[:] = np.nan
+        for (j, seg) in enumerate(segments):
+            for h in seg.histories:  # type: ignore
+                attempt_number = h.attempt_number
+                if (attempt_number in attempt_number_indices):
+                    arr[attempt_number_indices[attempt_number], j] = dur(h) / 1000
+        return pd.DataFrame(arr, index = pd.Index(attempt_numbers, name = 'attempt'), columns = [seg.name for seg in segments]).dropna(axis = 0, how = 'all')

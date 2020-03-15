@@ -12,7 +12,7 @@ Then to access the main data types in Python:
 
 `import splitsio`
 
-## Resource Types
+## Usage
 
 ### Game
 
