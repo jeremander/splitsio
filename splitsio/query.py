@@ -83,16 +83,21 @@ class SplitsIOData(DataClassJsonMixin):
     def endpoint_prefix(self) -> str:
         """Endpoint prefix for an object with a particular ID."""
         return self.collection() + '/' + self.canonical_id + '/'
-    def get_associated(self, cls: Type[T], name: str) -> Sequence[T]:
-        """Gets all associated objects of a certain type related to this one."""
-        endpoint = self.endpoint_prefix() + name
+    @classmethod
+    def query(cls: Type[T], endpoint: str, key: Optional[str] = None) -> Sequence[T]:
+        """Queries an endpoint and converts results (possibly paginated) to this type."""
+        key = cls.collection() if (key is None) else key
         (header, d) = query(endpoint)
         if ('Per-Page' in header):
             # only have the first page, so return a paginator
             paginator = SplitsIOPaginator(cls, endpoint, header)
             # already have the first page, so store it
-            paginator.pages[0] = [cls.from_dict(item) for item in d[cls.collection()]]
+            paginator.pages[0] = [cls.from_dict(item) for item in d[key]]
             return paginator
         # otherwise, all the results have been obtained
-        return [cls.from_dict(item) for item in d[name]]
-
+        return [cls.from_dict(item) for item in d[key]]
+    def get_associated(self, cls: Type[T], key: Optional[str] = None) -> Sequence[T]:
+        """Gets all associated objects of a certain type related to this one."""
+        key = cls.collection() if (key is None) else key
+        endpoint = self.endpoint_prefix() + key
+        return cls.query(endpoint, key = key)

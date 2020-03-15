@@ -12,7 +12,7 @@ from typing import Any, Counter, List, NamedTuple, Optional, Sequence, Type
 from dataclasses_json import config
 from marshmallow import fields
 
-from splitsio.query import query, SplitsIOData
+from splitsio.query import SplitsIOData
 
 
 CategoryCounts = NamedTuple('CategoryCounts', [('category', 'Category'), ('numRuns', int)])
@@ -60,10 +60,10 @@ class Category(SplitsIOData):
         return self.id
     def runs(self) -> Sequence['Run']:
         """Runs for the category."""
-        return self.get_associated(Run, 'runs')
+        return self.get_associated(Run)
     def runners(self) -> Sequence['Runner']:
         """Runners for the category."""
-        return self.get_associated(Runner, 'runners')
+        return self.get_associated(Runner)
 
 @dataclass
 class Game(SplitsIOData):
@@ -81,17 +81,19 @@ class Game(SplitsIOData):
     def canonical_id(self) -> str:
         return self.name if (self.shortname is None) else self.shortname
     @classmethod
-    def all(cls) -> List['Game']:
+    def all(cls) -> Sequence['Game']:
         """Obtains the list of all games."""
-        # TODO: this might get paginated
-        (_, d) = query('games')
-        return [Game.from_dict(item) for item in d['games']]
+        return cls.query(cls.collection())
+    @classmethod
+    def search(cls, name: str) -> Sequence['Game']:
+        """Obtains the list of games matching a given search term."""
+        return cls.query(cls.collection() + '?search=' + name)
     def runs(self) -> Sequence['Run']:
         """Runs for the game."""
-        return self.get_associated(Run, 'runs')
+        return self.get_associated(Run)
     def runners(self) -> Sequence['Runner']:
         """Runners for the game."""
-        return self.get_associated(Runner, 'runners')
+        return self.get_associated(Runner)
     def category_counts(self) -> List[CategoryCounts]:
         """Returns categories along with number of runs for that category."""
         if (self.categories is None):
@@ -125,16 +127,16 @@ class Runner(SplitsIOData):
         return self.name.lower()
     def runs(self) -> Sequence['Run']:
         """The runner's runs."""
-        return self.get_associated(Run, 'runs')
+        return self.get_associated(Run)
     def pbs(self) -> Sequence['Run']:
         """The runner's personal best runs."""
         return self.get_associated(Run, 'pbs')
     def games(self) -> Sequence[Game]:
         """Games for which the runner has at least one speedrun."""
-        return self.get_associated(Game, 'games')
+        return self.get_associated(Game)
     def categories(self) -> Sequence[Category]:
         """Categories the runner has participated in."""
-        return self.get_associated(Category, 'categories')
+        return self.get_associated(Category)
 
 @dataclass
 class History(SplitsIOData):
@@ -150,6 +152,19 @@ class History(SplitsIOData):
     @property
     def canonical_id(self) -> str:
         raise NotImplementedError
+    def is_complete(self) -> bool:
+        """Returns True if the run is complete (not reset).
+        It is considered complete if it has a stored realtime or gametime duration."""
+        return (self.realtime_duration_ms is not None) or (self.gametime_duration_ms is not None)
+    def duration(self) -> Optional[float]:
+        """Gets the duration in milliseconds. First tries realtime, then gametime, then elapsed time between start and end timestamps."""
+        dur = getattr(self, 'realtime_duration_ms', getattr(self, 'gametime_duration_ms', None))
+        if (dur is None):
+            start = self.started_at
+            end = self.ended_at
+            if (start is not None) and (end is not None):
+                dur = (end - start).seconds * 1000
+        return dur
 
 @dataclass
 class Segment(SplitsIOData):
@@ -225,25 +240,43 @@ class Run(SplitsIOData):
             return []
         completed_attempt_numbers = {history.attempt_number for history in segments[-1].histories}  # type: ignore
         return [history for history in self.histories if (history.attempt_number in completed_attempt_numbers)]
-        # return [history for history in self.histories if (history.realtime_duration_ms is not None) or (history.gametime_duration_ms is not None)]
-    def segment_durations(self, completed: bool = True) -> pd.DataFrame:
-        """Returns a matrix of segment durations, in seconds.
+    def segment_durations(self, complete: bool = True, clean: bool = False) -> pd.DataFrame:
+        """Returns a table of segment durations, in seconds.
         Rows are attempts (in chronological order); columns are segments.
-        If completed = True, only includes completed attempts; otherwise, uncompleted segments are assigned a null duration."""
-        def dur(history: History) -> float:
-            return getattr(history, 'realtime_duration_ms', getattr(history, 'gametime_duration_ms', None))
+        If complete = True, only includes completed attempts.
+        If clean = True, only includes attempts where each segment is completed (i.e. no missing splits).
+        Missing splits are assigned zero duration."""
         histories = [] if (self.histories is None) else self.histories
         segments = [] if (self.segments is None) else self.segments
-        if completed and (len(segments) > 0):
-            attempt_numbers = [h.attempt_number for h in segments[-1].histories]  # type: ignore
+        if complete and (len(segments) > 0):
+            attempt_numbers = [h.attempt_number for h in histories if h.is_complete()]
         else:
             attempt_numbers = [h.attempt_number for h in histories]
         attempt_number_indices = {j : i for (i, j) in enumerate(attempt_numbers)}
         arr = np.zeros((len(attempt_number_indices), len(segments)), dtype = float)
         arr[:] = np.nan
+        # fill in segment durations
         for (j, seg) in enumerate(segments):
             for h in seg.histories:  # type: ignore
                 attempt_number = h.attempt_number
                 if (attempt_number in attempt_number_indices):
-                    arr[attempt_number_indices[attempt_number], j] = dur(h) / 1000
-        return pd.DataFrame(arr, index = pd.Index(attempt_numbers, name = 'attempt'), columns = [seg.name for seg in segments]).dropna(axis = 0, how = 'all')
+                    arr[attempt_number_indices[attempt_number], j] = h.duration() / 1000  # type: ignore
+        df = pd.DataFrame(arr, index = pd.Index(attempt_numbers, name = 'attempt'), columns =  [seg.name for seg in segments])
+        if clean:  # zero values are invalid
+            return df.replace(0.0, np.nan).dropna(axis = 0, how = 'any')
+        return df.dropna(axis = 0, how = 'all').fillna(0.0)
+    def split_durations(self, complete: bool = True, clean: bool = False) -> pd.DataFrame:
+        """Returns a table of split durations (cumulative segment durations), in seconds.
+        Rows are attempts (in chronological order); columns are splits."""
+        seg_durs = self.segment_durations(complete, clean)
+        split_durs = seg_durs.cumsum(axis = 1)
+        split_durs['total'] = split_durs[split_durs.columns[-1]]
+        histories = [] if (self.histories is None) else self.histories
+        attempt_number_indices = {h.attempt_number : i for (i, h) in enumerate(histories)}
+        true_totals = []
+        for j in split_durs.index:
+            history = histories[attempt_number_indices[j]]
+            dur = history.duration()
+            true_totals.append(None if (dur is None) else (dur / 1000))
+        split_durs['true_total'] = true_totals
+        return split_durs

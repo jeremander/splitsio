@@ -38,6 +38,17 @@ NOTE: for games, the identifier for querying is the `shortname` (here `'sms'`), 
 Game(id='2206', name='007: Agent Under Fire', shortname='auf')
 ```
 
+#### Search games by name/keyword
+
+```python
+>>> mario_games = Game.search('mario')
+>>> len(mario_games)
+353
+>>> mario_games[0]
+Game(id='2524', name='Super Mario Advance 4: Super Mario Bros. 3', shortname='sma4')
+```Game(id='2524', name='Super Mario Advance 4: Super Mario Bros. 3', shortname='sma4')Game(id='2524', name='Super Mario Advance 4: Super Mario Bros. 3', shortname='sma4')
+```
+
 ### Category
 
 #### Get the speedrun categories for a game
@@ -66,7 +77,7 @@ Category(id='86832', name='No ACE')
 238
 >>> oot_runners[0]
 Runner(id='35', twitch_id='31809791', twitch_name='cma2819', display_name='cma2819', name='cma2819')
->>> no_ace_runners = no_ace.runners()
+>>> no_ace_runners = Category.from_id('86832').runners()
 >>> no_ace_runners[0]
 Runner(id='32189', twitch_id='63370787', twitch_name='bigmikey_', display_name='bigmikey_', name='bigmikey_')
 ```
