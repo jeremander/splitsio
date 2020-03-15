@@ -30,11 +30,13 @@ class IsoDatetime(datetime):
         dt = dateutil.parser.isoparse(s)
         return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond, dt.tzinfo)  # type: ignore
     def __repr__(self) -> str:
-        return repr(self.isoformat(timespec = 'milliseconds') + 'Z')
+        return repr(str(self))
+    def __str__(self) -> str:
+        return self.isoformat(timespec = 'milliseconds') + 'Z'
 
 isoparse = lambda ts : None if (ts is None) else IsoDatetime.isoparse(ts)
 
-isoformat = lambda dt : None if (dt is None) else repr(dt)
+isoformat = lambda dt : None if (dt is None) else str(dt)
 
 def isodatetime(**kwargs: Any) -> Field:  # type: ignore
     """dataclass field rendering a datetime object as a string when parsing/formatting."""
