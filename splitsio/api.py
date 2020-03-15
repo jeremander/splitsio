@@ -7,7 +7,7 @@ import dateutil.parser
 import numpy as np
 import pandas as pd
 from operator import attrgetter
-from typing import Any, Counter, List, NamedTuple, Optional, Sequence, Type
+from typing import Any, cast, Counter, List, NamedTuple, Optional, Sequence, Type
 
 from dataclasses_json import config
 from marshmallow import fields
@@ -246,12 +246,13 @@ class Run(SplitsIOData):
         If complete = True, only includes completed attempts.
         If clean = True, only includes attempts where each segment is completed (i.e. no missing splits).
         Missing splits are assigned zero duration."""
-        histories = [] if (self.histories is None) else self.histories
+        if (self.histories is None):
+            raise ValueError("cannot get segment durations without run histories")
         segments = [] if (self.segments is None) else self.segments
         if complete and (len(segments) > 0):
-            attempt_numbers = [h.attempt_number for h in histories if h.is_complete()]
+            attempt_numbers = [h.attempt_number for h in self.histories if h.is_complete()]
         else:
-            attempt_numbers = [h.attempt_number for h in histories]
+            attempt_numbers = [h.attempt_number for h in self.histories]
         attempt_number_indices = {j : i for (i, j) in enumerate(attempt_numbers)}
         arr = np.zeros((len(attempt_number_indices), len(segments)), dtype = float)
         arr[:] = np.nan
@@ -271,7 +272,7 @@ class Run(SplitsIOData):
         seg_durs = self.segment_durations(complete, clean)
         split_durs = seg_durs.cumsum(axis = 1)
         split_durs['total'] = split_durs[split_durs.columns[-1]]
-        histories = [] if (self.histories is None) else self.histories
+        histories = cast(List[History], self.histories)
         attempt_number_indices = {h.attempt_number : i for (i, h) in enumerate(histories)}
         true_totals = []
         for j in split_durs.index:

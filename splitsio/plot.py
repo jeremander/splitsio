@@ -1,4 +1,7 @@
-import matplotlib
+"""Functions for producing various plots based on speedrun data.
+Much of this is a work-in-progress.
+For official in-browser graphs, use splits.io Gold features."""
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 import numpy as np
