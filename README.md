@@ -10,7 +10,7 @@ To install: `pip3 install splitsio`
 
 Then to access the main data types in Python:
 
-`import splitsio`
+`from splitsio import *`
 
 ## Usage
 
