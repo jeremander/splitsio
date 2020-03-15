@@ -46,7 +46,6 @@ Game(id='2206', name='007: Agent Under Fire', shortname='auf')
 353
 >>> mario_games[0]
 Game(id='2524', name='Super Mario Advance 4: Super Mario Bros. 3', shortname='sma4')
-```Game(id='2524', name='Super Mario Advance 4: Super Mario Bros. 3', shortname='sma4')Game(id='2524', name='Super Mario Advance 4: Super Mario Bros. 3', shortname='sma4')
 ```
 
 ### Category
